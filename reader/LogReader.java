@@ -23,24 +23,21 @@ public class LogReader
 		try {
 			reader = new BufferedReader(new FileReader(this.path));
 			String line = reader.readLine();
-
 			while (true) {
 				if (line != null) {
 					System.out.println(line);
-					if (line.contains("shit")) {
+					if (line.contains("fuck")) {
 						System.out.println("No cursing on the server");
 						break;
 					}
 				}
 				line = reader.readLine();
 				try {
-					Thread.sleep(10);
+						Thread.sleep(10);
 				} catch (InterruptedException e) {
 					e.printStackTrace();
-				}
-				
+				}		
 			}
-
 			reader.close();
 		} catch (IOException e) {
 			e.printStackTrace();
