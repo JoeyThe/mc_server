@@ -9,15 +9,11 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
-
-import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.channels.SocketChannel;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Arrays;
 
 public class RconClient {
 	private Socket soc;
@@ -72,12 +68,15 @@ public class RconClient {
 			Thread.sleep(2000);
 
 			String cmd = "SeVeN_mc_890";
-			ByteBuffer cmdPkt = rc.genPacket(rc.SERVERDATA_AUTH, cmd);
-			rc.sendCmdPkt(cmdPkt);
+			rc.sendPacket(rc.SERVERDATA_AUTH, cmd);
+			byte[] resp1 = new byte[rc.MAX_RESP_SIZE];
+			resp1 = rc.readPacket(resp1);
 
-			byte[] resp = new byte[rc.MAX_RESP_SIZE];
-			resp = rc.recResp(resp);
-			rc.printByteArray(resp);
+			cmd = "whitelist list";
+			rc.sendPacket(rc.SERVERDATA_EXECCOMMAND, cmd);
+			byte[] resp2 = new byte[rc.MAX_RESP_SIZE];
+			resp2 = rc.readPacket(resp2);
+
 
 			rc.closeConnection();
 			System.exit(0);
@@ -98,58 +97,43 @@ public class RconClient {
 		System.out.println("Output shutdown? "+	this.soc.isOutputShutdown());
 	}
 
-	public void sendCommand(byte[] command) {
-		System.out.println("Sending command");
-		try {
-			this.out.write(command);
-		} catch (IOException e) {
-			//e.printStackTrace();
-			System.out.print("FAILURE: Write for command failed! Bytes for attempted command: ");
-			this.printByteArray(command);
-		}
-	}
-
-	public byte[] recResp(byte[] resp) {
-		try {
-			this.in.read(resp);
-
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		return resp;
-	}
-
-	public ByteBuffer genPacket(int pktType, String command) {
+	public void sendPacket(int pktType, String body) {
 		// Calculate packet size
-		int pktSize  = this.MIN_PKT_SIZE + command.length();
-		int buffSize = this.SIZE_SIZE + pktSize;
-		// Create ByteBuffer object
-		ByteBuffer cmdPkt = ByteBuffer.allocate(buffSize);
-		cmdPkt.order(ByteOrder.LITTLE_ENDIAN);	
-		// Add command size to buffer
-		cmdPkt.putInt(pktSize);
-		// Add packet id to buffer, increment id
-		cmdPkt.putInt(this.pktId.incrementAndGet());
-		// Add packet type to buffer
-		cmdPkt.putInt(pktType);
-//		System.out.print("Buffer before command: ");
-		this.printByteArray(cmdPkt.array());
-		// Convert string to byte array
-//		System.out.print("Command string to bytes: ");
-		this.printByteArray(command.getBytes());
-		cmdPkt.put(command.getBytes());
-		// Return the damn thing
-		return cmdPkt;
-	}
-
-	public void sendCmdPkt(ByteBuffer cmdPkt) {
-		System.out.println("Sending command");
+                int pktSize  = this.MIN_PKT_SIZE + body.length();
+                int buffSize = this.SIZE_SIZE + pktSize;
+                // Create ByteBuffer object
+                ByteBuffer pkt = ByteBuffer.allocate(buffSize);
+                pkt.order(ByteOrder.LITTLE_ENDIAN);
+                // Add body size to buffer
+                pkt.putInt(pktSize);
+                // Add packet id to buffer, increment id
+                pkt.putInt(this.pktId.incrementAndGet());
+                // Add packet type to buffer
+                pkt.putInt(pktType);
+                // Convert string to byte array
+                pkt.put(body.getBytes());
+                // Return the damn thing
 		try {
-			this.out.write(cmdPkt.array());
+			this.out.write(pkt.array());
+			System.out.println("Packet SENT. Packet details:");
+			this.printByteArray(pkt.array());
+//			this.getPacketDetails(pkt.array());
 		} catch (IOException e) {
-			System.out.println("FAILURE: Command failed to send!");
 			e.printStackTrace();
 		}
+	}
+
+	public byte[] readPacket(byte[] pkt) {
+		int noBytes;
+		try {
+			noBytes = this.in.read(pkt);
+			pkt = Arrays.copyOf(pkt, noBytes);
+			System.out.println("Packet READ. Packet details:");
+			this.printByteArray(pkt);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		return pkt;
 	}
 
 	public void closeConnection() {
