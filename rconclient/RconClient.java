@@ -14,6 +14,10 @@ import java.nio.ByteOrder;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Arrays;
+import java.lang.String;
+import java.nio.charset.StandardCharsets;
+
+import logger.Logger;
 
 public class RconClient {
 	private Socket soc;
@@ -31,9 +35,9 @@ public class RconClient {
 	final static int NULL_SIZES 	= 2;
 	final static int MIN_PKT_SIZE 	= ID_SIZE + TYPE_SIZE + NULL_SIZES;
 
-	final static int MAX_RESP_SIZE = 4096;
-
 	private AtomicInteger pktId = new AtomicInteger(0);
+
+        final static int MAX_RESP_SIZE = 4096;
 
 	public RconClient() {
 		try {
@@ -43,51 +47,7 @@ public class RconClient {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-
-//		final int MIN_PKT_SIZE = ID_SIZE + TYPE_SIZE + TERM_SIZE;
 	}
-
-        public static void main(String[] args) {
-		RconClient rc = new RconClient();
-		try {
-			byte[] command = {
-				(byte) 0x11, (byte) 0x00, (byte) 0x00, (byte) 0x00,
-				(byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x00,
-				(byte) 0x03, (byte) 0x00, (byte) 0x00, (byte) 0x00,
-				(byte) 0x70, (byte) 0x61, (byte) 0x73, (byte) 0x73, (byte) 0x77, (byte) 0x72, (byte) 0x64, (byte) 0x00,
-				(byte) 0x00};
-			byte[] query = new byte[256];
-
-			ByteBuffer test = ByteBuffer.wrap(command);
-
-//			System.out.println("Connecting socket");
-//			Thread.sleep(2000);
-
-			System.out.println("Getting socket data");
-			rc.getData();
-			Thread.sleep(2000);
-
-			String cmd = "SeVeN_mc_890";
-			rc.sendPacket(rc.SERVERDATA_AUTH, cmd);
-			byte[] resp1 = new byte[rc.MAX_RESP_SIZE];
-			resp1 = rc.readPacket(resp1);
-
-			cmd = "whitelist list";
-			rc.sendPacket(rc.SERVERDATA_EXECCOMMAND, cmd);
-			byte[] resp2 = new byte[rc.MAX_RESP_SIZE];
-			resp2 = rc.readPacket(resp2);
-
-
-			rc.closeConnection();
-			System.exit(0);
-
-//			System.out.println("Getting response");
-//			rc.printByteArray(rc.readResponse(query));
-//			Thread.sleep(2000);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-        }
 
 	public void getData() {
 		System.out.println("Bounded? "+		this.soc.isBound());
@@ -115,9 +75,21 @@ public class RconClient {
                 // Return the damn thing
 		try {
 			this.out.write(pkt.array());
-			System.out.println("Packet SENT. Packet details:");
-			this.printByteArray(pkt.array());
-//			this.getPacketDetails(pkt.array());
+			String msg = "";
+			msg = msg + "Packet SENT. Packet details:\n";
+			// Packet detail: Size
+			msg += "\t> Size:  " + pktSize + "\n";
+			// Packet detail: ID
+			msg += "\t> Id:    " + pktId.get() + "\n";
+			// Packet detail: Type
+			msg += "\t> Type:  " + pktType + "\n";
+			// Packet detail: body
+			if (pktType == 3) {
+				msg += "\t> Body:  " + body.replaceAll(".","*") + "\n";
+			} else {
+				msg += "\t> Body:  " + body;
+			}
+			Logger.log(msg);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -128,8 +100,21 @@ public class RconClient {
 		try {
 			noBytes = this.in.read(pkt);
 			pkt = Arrays.copyOf(pkt, noBytes);
-			System.out.println("Packet READ. Packet details:");
-			this.printByteArray(pkt);
+			String msg = "";
+			msg += "Packet RECEIVED. Packet details:\n";
+			// Packet detail: Size
+			int pktSize = pkt[0] + (pkt[1] << 8) + (pkt[2] << 16) + (pkt[3] << 32);
+		        msg += "\t> Size:  " + pktSize + "\n";
+                        // Packet detail: ID
+			int pktId = pkt[4] + (pkt[5] << 8) + (pkt[6] << 16) + (pkt[7] << 32);
+                        msg += "\t> Id:    " + pktId + "\n";
+                        // Packet detail: Type
+			int pktType = pkt[8] + (pkt[9] << 8) + (pkt[10] << 16) + (pkt[11] << 32);
+                        msg += "\t> Type:  " + pktType + "\n";
+                        // Packet detail: body
+			String body = new String(Arrays.copyOfRange(pkt,12,pkt.length-2), StandardCharsets.UTF_8);
+                        msg += "\t> Body:  " + body;
+			Logger.log(msg);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -151,6 +136,5 @@ public class RconClient {
 		}
 		System.out.println();
 	}	
-
 }
 

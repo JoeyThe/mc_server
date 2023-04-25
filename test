@@ -1,0 +1,15 @@
+                        String cmd = "SeVeN_mc_890";
+                        rc.sendPacket(rc.SERVERDATA_AUTH, cmd);
+                        byte[] resp1 = new byte[rc.MAX_RESP_SIZE];
+                        resp1 = rc.readPacket(resp1);
+
+                        cmd = "whitelist list";
+                        rc.sendPacket(rc.SERVERDATA_EXECCOMMAND, cmd);
+                        byte[] resp2 = new byte[rc.MAX_RESP_SIZE];
+                        resp2 = rc.readPacket(resp2);
+
+                        cmd = "whitelist lisdt";
+                        rc.sendPacket(rc.SERVERDATA_EXECCOMMAND, cmd);
+                        byte[] resp3 = new byte[rc.MAX_RESP_SIZE];
+                        resp3 = rc.readPacket(resp3);
+

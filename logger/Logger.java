@@ -1,5 +1,8 @@
 package logger;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
 public class Logger {
 	// Attributes
 	
@@ -10,5 +13,8 @@ public class Logger {
 
 	}
 
-	
+	public static void log(String msg) {
+		System.out.println("[" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("MM-dd-yyyy'T'HH:mm:ss.SSS'Z'")) + "] " + msg);
+	}
 }
+

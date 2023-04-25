@@ -1,16 +1,19 @@
 import reader.LogReader;
-import commander.Commander;
 import processor.Processor;
+import rconclient.RconClient;
 
 public class Main {
 	public static void main(String[] args) {
 		// Start the server process
 		Processor serverProcess = new Processor();
-		// Start commander
-		Commander commander	= new Commander(serverProcess);
+		// Start the RCON client
+		RconClient rc 		= new RconClient();
 		// Start log reader
-		LogReader logReader 	= new LogReader("/home/joey/mc_server/logs/latest.log", commander);
+		LogReader logReader 	= new LogReader(serverProcessor, rc);
 
 		logReader.continuousRead();
+
+		rc.closeConnection();
+		serverProcess.kill();
 	}
 }

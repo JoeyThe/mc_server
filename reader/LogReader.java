@@ -4,14 +4,15 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 
-import commander.Commander;
+import logger.Logger;
 
 public class LogReader {
 	// Attributes
-	public Commander commander;	// Commander that we are passing in
-	public String path;		// Path to log file
-	private String target;		// Target user for commands
-	private boolean testRead = false;
+	public Processor serverProcessor;	// Server processor 
+	public RconClient rc;			// RCON client object
+	public String path;			// Path to log file
+	private String target;			// Target user for commands
+	private boolean testRead = true;
 	// Color attributes
 	public static final String ANSI_RESET 	= "\u001B[0m";
 	public static final String ANSI_BLACK 	= "\u001B[30m";
@@ -24,15 +25,22 @@ public class LogReader {
 	public static final String ANSI_WHITE 	= "\u001B[37m";
 	
 	// Constructor
-	public LogReader(String path, Commander commander) {
-		this.commander 	= commander;
-		this.path 	= path;
-		this.path = commander.serverProcessor.getLogFileName();
-		System.out.println("Path: "+path);
+	public LogReader(Processor serverProcessor, RconClient rc) {
+		// Initialize server processor
+		this.serverProcessor = serverProcessor;
+		// Set path
+		this.path = serverProcessor.getLogFileName();
+		// Initialize RCON client and authenticate with server
+		this.rc = rc;
+                String cmd = "SeVeN_mc_890";
+                rc.sendPacket(rc.SERVERDATA_AUTH, cmd);
+                byte[] resp1 = new byte[rc.MAX_RESP_SIZE];
+                resp1 = rc.readPacket(resp1);
 	}
 
 	public void continuousRead() {
 		// Start continuous read of the server log file
+		// Leaving this loop means killing the server
 		BufferedReader reader;
 
 		try {
@@ -47,23 +55,20 @@ public class LogReader {
 					continue;
 				}
 				if (line != null) {
-					System.out.println(line);
-					if (line.contains("%quit")) {
-						// Some command for grabbing the target name from the log line
-						//commander.send_command("/kick "+target)
-						System.out.println("Supreme Overlord Josep Birardini has ended the program.");
-						commander.sendCommand("%TEST COMMAND");
+					Logger.log(line);
+					if (line.contains("%stop")) {
+						Logger.log("Supreme Overlord Josep Birardini has ended the program.");
+						rc.sendPacket(rc.SERVERDATA_EXECCOMMAND, "stop");	
 						break;
 					}
 					if (line.contains("shit")) {
-						getTargetFromLogLine(line);
-						commander.sendCommand("%TEST COMMAND");
-						System.out.println("KICKING PLAYER "+getTarget()+" FOR SAYING \"shit\"");
+						parseTargetAndSet(line);
+						Logger.log("KICKING PLAYER "+getTarget()+" FOR SAYING \"shit\"");
 					}
 				}
 				line = reader.readLine();
 				try {
-						Thread.sleep(10);
+					Thread.sleep(10);
 				} catch (InterruptedException e) {
 					e.printStackTrace();
 				}		
@@ -84,7 +89,7 @@ public class LogReader {
 		this.target = target;
 	}
 
-	public void getTargetFromLogLine(String line) {
+	public void parseTargetAndSet(String line) {
 		// Get target name from the line that is passed
 		String[] targetStrArray = line.split("<",2)[1].split(">",2);
 		setTarget(targetStrArray[0]);
