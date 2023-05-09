@@ -19,10 +19,10 @@ import logger.Logger;
 public class Processor {
 	// Attributes
 	private List<String> commands = new ArrayList<String>();
-	private String log_file;	
+	private String logFilename;	
 	private ByteArrayOutputStream commandWriter;
-	private serverProcessBuilder;
-	private serverProcess;
+	private ProcessBuilder serverProcessBuilder;
+	private Process serverProcess;
 
 	// Constructor
 	public Processor() {
@@ -40,15 +40,15 @@ public class Processor {
 		// Include stderror in output stream
 		serverProcessBuilder.redirectErrorStream(true);
 		// Set home directory for ProcessBuilder
-		serverProcessBuild.directory(new File("/home/joey/mc_server"));
+		serverProcessBuilder.directory(new File("/home/joey/mc_server"));
 		logFilename = "/home/joey/mc_server/automation_java/processor/proc_log_"+LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd-MM-yyyy_HH-mm-ss"))+".log";
 		Logger.log("Writing process logs to: "+logFilename);
 		File log = new File(logFilename);
 		// Redirect output of server process to log file
-		serverProcessBuild.redirectOutput(Redirect.appendTo(log));
+		serverProcessBuilder.redirectOutput(Redirect.appendTo(log));
 		serverProcess = null;
 		try {
-			serverProcess = serverProcessBuild.start();
+			serverProcess = serverProcessBuilder.start();
 			System.out.println("Server started!");
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -56,7 +56,7 @@ public class Processor {
 	}
 
 	public String getLogFileName() {
-		return log_file;
+		return logFilename;
 	}
 
 	public void kill() {

@@ -5,6 +5,9 @@ import java.io.FileReader;
 import java.io.IOException;
 
 import logger.Logger;
+import processor.Processor;
+import rconclient.RconClient;
+import commander.Commander;
 
 public class LogReader {
 	// Attributes
@@ -12,7 +15,7 @@ public class LogReader {
 	public RconClient rc;			// RCON client object
 	public String path;			// Path to log file
 	private String target;			// Target user for commands
-	private boolean testRead = true;
+	private boolean testRead = false;
 	// Color attributes
 	public static final String ANSI_RESET 	= "\u001B[0m";
 	public static final String ANSI_BLACK 	= "\u001B[30m";
@@ -64,6 +67,10 @@ public class LogReader {
 					if (line.contains("shit")) {
 						parseTargetAndSet(line);
 						Logger.log("KICKING PLAYER "+getTarget()+" FOR SAYING \"shit\"");
+					}
+					// Check if the line contains the command key character
+					if (line.contains("%")) {
+						Commander.parseCommand(line);
 					}
 				}
 				line = reader.readLine();

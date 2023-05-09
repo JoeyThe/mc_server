@@ -24,28 +24,39 @@ public class RconClient {
 	private DataOutputStream out;
    	private DataInputStream in;
 
-	final static int SERVERDATA_AUTH 	   = 3;
-	final static int SERVERDATA_AUTH_RESPONSE  = 2;
-	final static int SERVERDATA_EXECCOMMAND    = 2;
-	final static int SERVERDATA_RESPONSE_VALUE = 0;
+	public final static int SERVERDATA_AUTH 	  = 3;
+	public final static int SERVERDATA_AUTH_RESPONSE  = 2;
+	public final static int SERVERDATA_EXECCOMMAND    = 2;
+	public final static int SERVERDATA_RESPONSE_VALUE = 0;
 
-	final static int SIZE_SIZE 	= 4;
-	final static int ID_SIZE 	= 4;
-	final static int TYPE_SIZE 	= 4;
-	final static int NULL_SIZES 	= 2;
-	final static int MIN_PKT_SIZE 	= ID_SIZE + TYPE_SIZE + NULL_SIZES;
+	private final static int SIZE_SIZE 	= 4;
+	private final static int ID_SIZE 	= 4;
+	private final static int TYPE_SIZE 	= 4;
+	private final static int NULL_SIZES 	= 2;
+	private final static int MIN_PKT_SIZE 	= ID_SIZE + TYPE_SIZE + NULL_SIZES;
 
 	private AtomicInteger pktId = new AtomicInteger(0);
 
-        final static int MAX_RESP_SIZE = 4096;
+        public final static int MAX_RESP_SIZE = 4096;
 
 	public RconClient() {
-		try {
-			soc = new Socket("localhost", 25575);
-	        	out = new DataOutputStream(soc.getOutputStream());
-     			in  = new DataInputStream(soc.getInputStream());
-		} catch (Exception e) {
-			e.printStackTrace();
+		boolean connectionMade = false;
+		while (!connectionMade) {
+			try {
+	                        soc = new Socket("localhost", 25575);
+        	                out = new DataOutputStream(soc.getOutputStream());
+                	        in  = new DataInputStream(soc.getInputStream());
+				Logger.log("Connection to RCON server made!");
+				connectionMade = true;
+               		} catch (Exception e) {
+                        	//e.printStackTrace();
+				Logger.log("RCON connection not made! Waiting for server...");
+				try {
+					Thread.sleep(5000);
+				} catch (Exception e2) {
+					e2.printStackTrace();
+				}
+                	}
 		}
 	}
 

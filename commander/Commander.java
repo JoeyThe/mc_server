@@ -1,26 +1,21 @@
 package commander;
 
-import processor.Processor;
+import Java.utils.Arrays;
 
 public class Commander {
         // Attributes
-	public Processor serverProcessor; // Process for the server        
+	private static final String NOT_A_COMMAND = "NOT_A_COMMAND";
+	private static final String[] validCommands = new String [
+		"testMsg"
+	];
 
-        // Constructor
-        public Commander(Processor serverProcessor) {
-                System.out.println("COMMANDER");
-		this.serverProcessor = serverProcessor;
-
-        }
-
-	public boolean sendCommand(String command) {
-		boolean command_success = false;
-		System.out.println("Command: "+command);
-		// Code to send the command through some process that the server can interpret
-		// If the process works, set command_success to true
-		command_success = true;
-		return command_success;
+	public String parseCommand(String line) {
+		String parsedCmd = line.split("%",2)[1].split(" ",2)[0];
+		return verifyValidCommand(parsedCmd) ? parsedCmd : NOT_A_COMMAND;
 	}
- 
+
+	public boolean verifyValidCommand(String potentialCmd) {
+		return Arrays.stream(validCommands).anyMatch(potentialCmd::equals);
+	}
 }
 
