@@ -6,3 +6,6 @@ javac -d /home/joey/mc_server/automation_java /home/joey/mc_server/automation_ja
 
 javac -d /home/joey/mc_server/automation_java /home/joey/mc_server/automation_java/Main.java
 
+
+#	-classpath ".:./json-simple-1.1.1.jar:./logger/Logger.class:./rconclient/RconClient.class" \
+

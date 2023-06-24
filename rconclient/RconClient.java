@@ -24,10 +24,12 @@ public class RconClient {
 	private DataOutputStream out;
    	private DataInputStream in;
 
-	public final static int SERVERDATA_AUTH 	  = 3;
-	public final static int SERVERDATA_AUTH_RESPONSE  = 2;
-	public final static int SERVERDATA_EXECCOMMAND    = 2;
-	public final static int SERVERDATA_RESPONSE_VALUE = 0;
+	public final static int SERVERDATA_AUTH 	  	= 3;
+	public final static int SERVERDATA_AUTH_RESPONSE  	= 2;
+	public final static int SERVERDATA_EXECCOMMAND    	= 2;
+	public final static int SERVERDATA_RESPONSE_VALUE 	= 0;
+
+	public boolean authenticated		 		= false;
 
 	private final static int SIZE_SIZE 	= 4;
 	private final static int ID_SIZE 	= 4;
@@ -60,32 +62,30 @@ public class RconClient {
 		}
 	}
 
-	public void getData() {
-		System.out.println("Bounded? "+		this.soc.isBound());
-		System.out.println("Closed? "+		this.soc.isClosed());
-		System.out.println("Connected? "+	this.soc.isConnected());
-		System.out.println("Input shutdown? "+	this.soc.isInputShutdown());
-		System.out.println("Output shutdown? "+	this.soc.isOutputShutdown());
-	}
-
-	public void sendPacket(int pktType, String body) {
+	public void sendPacket(int pktType, String body) {	
 		// Calculate packet size
-                int pktSize  = this.MIN_PKT_SIZE + body.length();
-                int buffSize = this.SIZE_SIZE + pktSize;
+                int pktSize  = MIN_PKT_SIZE + body.length();
+                int buffSize = SIZE_SIZE + pktSize;
                 // Create ByteBuffer object
                 ByteBuffer pkt = ByteBuffer.allocate(buffSize);
                 pkt.order(ByteOrder.LITTLE_ENDIAN);
                 // Add body size to buffer
                 pkt.putInt(pktSize);
                 // Add packet id to buffer, increment id
-                pkt.putInt(this.pktId.incrementAndGet());
+                pkt.putInt(pktId.incrementAndGet());
                 // Add packet type to buffer
                 pkt.putInt(pktType);
                 // Convert string to byte array
                 pkt.put(body.getBytes());
                 // Return the damn thing
 		try {
-			this.out.write(pkt.array());
+			// If authenticating client, call special method and don't print out message
+			if (pktType == 3) {
+				System.out.println("Attempting to authenticate RCON client...");
+				out.write(pkt.array());
+				return;
+			}
+			out.write(pkt.array());
 			String msg = "";
 			msg = msg + "Packet SENT. Packet details:\n";
 			// Packet detail: Size
@@ -95,21 +95,20 @@ public class RconClient {
 			// Packet detail: Type
 			msg += "\t> Type:  " + pktType + "\n";
 			// Packet detail: body
-			if (pktType == 3) {
-				msg += "\t> Body:  " + body.replaceAll(".","*") + "\n";
-			} else {
-				msg += "\t> Body:  " + body;
-			}
+			msg += "\t> Body:  " + body;
 			Logger.log(msg);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
-
-	public byte[] readPacket(byte[] pkt) {
+	
+	// Get the body of the response packet from sending a command
+	public String readPacket() {
+		byte[] pkt = new byte[MAX_RESP_SIZE];
 		int noBytes;
+		String body = "";
 		try {
-			noBytes = this.in.read(pkt);
+			noBytes = in.read(pkt);
 			pkt = Arrays.copyOf(pkt, noBytes);
 			String msg = "";
 			msg += "Packet RECEIVED. Packet details:\n";
@@ -123,19 +122,30 @@ public class RconClient {
 			int pktType = pkt[8] + (pkt[9] << 8) + (pkt[10] << 16) + (pkt[11] << 32);
                         msg += "\t> Type:  " + pktType + "\n";
                         // Packet detail: body
-			String body = new String(Arrays.copyOfRange(pkt,12,pkt.length-2), StandardCharsets.UTF_8);
+			body = new String(Arrays.copyOfRange(pkt,12,pkt.length-2), StandardCharsets.UTF_8);
                         msg += "\t> Body:  " + body;
 			Logger.log(msg);
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		return pkt;
+		return body;
+	}
+
+
+	// Separate method for authenticating client to catch mis-authentication(?)
+	public boolean authenticateClient(String pwrd) {
+		Logger.log("Authenticating...");
+		sendPacket(SERVERDATA_AUTH, pwrd);
+		readPacket();
+		// Do some check on the authenticate response
+		setAuthentication(true);
+		return getAuthentication();
 	}
 
 	public void closeConnection() {
 		System.out.println("Closing connection");
 		try {
-			this.soc.close();
+			soc.close();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -147,5 +157,13 @@ public class RconClient {
 		}
 		System.out.println();
 	}	
+
+	public boolean getAuthentication() {
+		return authenticated;
+	}
+
+	public void setAuthentication(boolean auth) {
+		authenticated = auth;
+	}
 }
 
