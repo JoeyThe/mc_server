@@ -99,6 +99,7 @@ public class Commander {
 			// Rethinking about how I want to handle non-custom commands...
 			// I have decided that all server commands can be handled by custom commands
 			Logger.log("ERROR: "+parsedCmd+" is not a valid custom comand.");
+			rconSendDirMsg(parsedCmd+" is not a valid command! Send '%%cmdListCmds' for a list of valid commands.");
 			return NOT_A_COMMAND;
 		}
 	}
@@ -108,6 +109,15 @@ public class Commander {
 	}
 
 	// Custom commands
+
+	/**
+	 * Custom command<br>
+	 * Send a direct message to the targeted player with a list of valid commands.
+	 */
+	public String cmdListCmds(String parsedArguments) {
+		//TODO: Implement
+		return "hehe";
+	}
 	
 	/**
 	 * Custom command<br>
@@ -204,6 +214,8 @@ public class Commander {
 		return respBody;
 	}
 	
+	
+	
 	/**
 	 * Custom command<br>
 	 * Shows the player the last ten locations of their special coords file as a personal hover event message<br>
@@ -250,10 +262,8 @@ public class Commander {
 	public String rconSendAndGet(String serverCmdText) {
 		// Send RCON command
 		rc.sendPacket(RconClient.SERVERDATA_EXECCOMMAND, serverCmdText);
-		// Get response
-		String respBody = rc.readPacket();
 		// Checks to see if command worked
-		return respBody;
+		return rc.readPacket();
 	}
 	
 	// RCON send message to target
