@@ -27,10 +27,13 @@ import java.lang.NumberFormatException;
  */
 
 public class Commander {
-        // Attributes	
+    // Attributes	
 	public RconClient rc;			// RCON client object
-	private static final String NOT_A_COMMAND  = "NOT_A_COMMAND";
-	private static final String FAILED_COMMAND = "FAILED_COMMAND";
+	public CommandRefs cmdRefs;    	// Command refs for generating commands
+	public String currCmd = ""; 	// Current executing command
+	private static final String NOT_A_COMMAND  	= "NOT_A_COMMAND";
+	private static final String FAILED_COMMAND 	= "FAILED_COMMAND";
+	private static final int MAX_NOTE_LENGTH	= 50; 
 	private static final String[] VALID_CUSTOM_COMMANDS = new String[] {
 		"testMsg",
 		"testCmd",
@@ -84,11 +87,14 @@ public class Commander {
 		// Check if custom command, if not send an error
 		if (verifyValidCommand(parsedCmd)) {
 			Logger.log("Player "+getTarget()+" sending valid custom command: "+parsedCmd);
+			currCmd = parsedCmd;
 			switch (parsedCmd) {
 				case "logCoords":
 					return cmdLogCoords(parsedArguments);
 				case "showCoords":
 					return cmdShowCoords(parsedArguments);
+				case "testCmd":
+					return cmdTestCmd(parsedArguments);
 				case "end":
 					return cmdEnd(parsedArguments);
 				default:
@@ -96,8 +102,6 @@ public class Commander {
 			}
 		}
 		else {
-			// Rethinking about how I want to handle non-custom commands...
-			// I have decided that all server commands can be handled by custom commands
 			Logger.log("ERROR: "+parsedCmd+" is not a valid custom comand.");
 			rconSendDirMsg(parsedCmd+" is not a valid command! Send '%%cmdListCmds' for a list of valid commands.");
 			return NOT_A_COMMAND;
@@ -121,12 +125,40 @@ public class Commander {
 	
 	/**
 	 * Custom command<br>
+	 * Custom command that is read in from a file. Used for testing commands without having to restart server.
+	 */
+	public String cmdTestCmd(String parsedArguments) {
+		// Read command in from file
+		Path testCmd = FileSystems.getDefault().getPath(WORKING_CMDR_DIR, "/testCmd.txt");
+		String respBody = NOT_A_COMMAND;
+		String cmd;
+		try {
+			cmd = Files.readString(testCmd).replace("\n", "");
+			respBody = rconSendAndGet(cmd);
+			return respBody;
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			Logger.log(e.toString());
+		}
+
+		return respBody;
+	}
+	
+	/**
+	 * Custom command<br>
 	 * Player sends this command to log their current X/Y/Z coordinates to their playerdata/\<target\>/special_coords file.<br>
 	 * Player can optionally supply a "note" argument that will be saved with the coordinates (e.g. description of<br>
 	 * the environment, a warning for other players, something silly). Coordinates are saved in the special_coords<br>
-	 * file as: Id, X/Y/Z coordinates, note. 
+	 * file as: Id, X/Y/Z coordinates, note. All coords are then written to palyer's special coords written book.<br>
+	 * If the coord book already exists in the player's inventory, then replace the book with one that has the new coords.
 	 */
 	public String cmdLogCoords(String parsedArguments) {
+		// Make sure that the notes are not over X characters long
+		if (parsedArguments.length() > MAX_NOTE_LENGTH) {
+			Logger.log("Note for coords is too long.");
+			rconSendFailCmdMsg("Note for coord is too long, please limit notes to "+MAX_NOTE_LENGTH+" chars.");
+			return FAILED_COMMAND;
+		}
 		Logger.log("Logging "+getTarget()+"'s position data.");
 		// Send rcon command to get player's position data
 		String serverCmdText = "data get entity "+getTarget()+" Pos";
@@ -148,6 +180,7 @@ public class Commander {
 			// Catch security expection and return failed command
 			catch (SecurityException se) {
 				Logger.log("Player data dir failed to be created. Error:\n"+stackTraceToString(se));
+				rconSendFailCmdMsg("Player data dir could not be created. Please contact admin.");
 				return FAILED_COMMAND;
 			}		
 		}
@@ -161,10 +194,13 @@ public class Commander {
 			// Throws too many exceptions, just catch them all
 			catch (Exception e) {
 				Logger.log("Special coord file failed to be created. Error:\n"+stackTraceToString(e));
+				rconSendFailCmdMsg("Special coord file could not be created. Please contact admin.");
 				return FAILED_COMMAND;
 			}
 		}
 		// Get latest coord id from file and increment
+		// get contents of file as string for generating coord book
+		String contents = "";
 		if (!firstEntry) {
 			BufferedReader reader;
 			try {
@@ -172,6 +208,7 @@ public class Commander {
 			}
 			catch (FileNotFoundException e) {
 				Logger.log("Special coord file failed to be found. Error:\n"+stackTraceToString(e));
+				rconSendFailCmdMsg("Special coord file could not be found. Please contact admin.");
 				return FAILED_COMMAND;
 			}
 			String tempLine = "";
@@ -188,10 +225,12 @@ public class Commander {
 				} 
 				catch (NumberFormatException e){
 					Logger.log("Failed to read number from line. Probably written wrong. Error:\n"+stackTraceToString(e));
+					rconSendFailCmdMsg("Failed to read proper corod ID from file. Please contact admin.");
 					return FAILED_COMMAND;
 				}
 			} catch (IOException e) {
 				Logger.log("Failed to read line or close reader. Error:\n"+stackTraceToString(e));
+				rconSendFailCmdMsg("Failed to read line or close player special coords files. Please contact admin.");
 				return FAILED_COMMAND;
 			}
 		}
@@ -204,12 +243,34 @@ public class Commander {
 		// Write coordinates to file
 		try {
 			Files.write(specialCoords, (coordStr+"\n").getBytes(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-			rconSendDirMsg("Coords successfully logged!");
+			rconSendDirMsg("Coords logged to player's unique file!");
+			contents = Files.readString(specialCoords);
 		}
 		catch (IOException e){
 			// Catch IOException and return failed command
 			Logger.log("Error writing coords to file. Error:\n"+stackTraceToString(e));
+			rconSendFailCmdMsg("Failed to write coords to player special coords file. Please contact admin.");
 			return FAILED_COMMAND;
+		}
+		
+		// Write coords to written book for the player
+		// Check if the player already has the book in their inventory
+		respBody = rconSendAndGet(CommandRefs.generateGetItemSlot("{id:\"minecraft:written_book\",tag:{Owner:\""+getTarget()+"\"}}", getTarget()));
+		// If they don't have it, give it to them
+		if (respBody.contains("Found no elements matching")) {
+			respBody = rconSendAndGet(CommandRefs.generateGiveCoordBook(contents.replace("\n", "\\\\n"), getTarget()));
+			rconSendDirMsg("Coords book generated!");
+		}
+		// Player has the book, replace their current one this a modified one
+		else if (respBody.contains("has the following entity data: ")) {
+			String slotStr  = respBody.split("has the following entity data: ",2)[1].replace("b",""); 
+			respBody = rconSendAndGet(CommandRefs.generateModifyCoordBook(contents.replace("\n", "\\\\n"), getTarget(), slotStr));
+			rconSendDirMsg("Coords book updated!");
+		}
+		// Player probably has multiple copies of the book (fucker)
+		else {
+			rconSendDirMsg("Coordinates were logged but the server cannot update the book because the player probably"+
+						   " has too many copies of the book in their inventory. Get rid of extras please.");
 		}
 		return respBody;
 	}
@@ -268,21 +329,21 @@ public class Commander {
 	
 	// RCON send message to target
 	public void rconSendDirMsg(String msg) {
-		String serverCmdText = "tellraw "+getTarget()+" {\"text\":\""+msg+"\"}";
-		rconSendAndGet(serverCmdText);
+		rconSendAndGet(CommandRefs.generateTellRawMsg(msg, getTarget()));
 	}
+	
+	// Send failed command message to target
+	public void rconSendFailCmdMsg(String failMsg) {
+		rconSendDirMsg(currCmd+" FAILED: "+failMsg);
+	}	
 	
 	// Target gets and sets
 	public String getTarget() {
-		// Get target name, set target text color
-		// Hmmm not sure if I like this.. It is good for printing but when I want to use the target name in a command,
-		// it might not like the ANSI coloring...
-		//return ANSI_PURPLE+target+ANSI_RESET;
 		return target;
 	}
 
+	// Set target name
 	public void setTarget(String target) {
-		// Set target name
 		this.target = target;
 	}
 	
