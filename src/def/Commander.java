@@ -9,16 +9,10 @@ import java.io.PrintWriter;
 import java.lang.Float;
 import java.io.BufferedReader;
 import java.io.FileReader;
-//import org.json.simple.JSONObject;
-//import javax.json.Json;
-//import javax.json.JsonObject;
-//import java.util.HashMap;
-
-// Exceptions
+import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.SecurityException;
 import java.io.FileNotFoundException;
-import java.lang.NumberFormatException;
 
 /**
  * This is the Commander class that does the heavy lifting for commands
@@ -37,8 +31,7 @@ public class Commander {
 	private static final String[] VALID_CUSTOM_COMMANDS = new String[] {
 		"testMsg",
 		"testCmd",
-		"logCoords",
-		"showCoords",
+		"coords",
 		"end"
 	};
 	private String target;			// Target user for commands
@@ -54,6 +47,8 @@ public class Commander {
 	public static final String ANSI_WHITE 	= "\u001B[37m";
 	
 	private static final String WORKING_CMDR_DIR = System.getProperty("user.dir")+"/commander"; 
+	private static final String PLAYERDATA_DIR	 = WORKING_CMDR_DIR+"/../serverdata/playerdata/";
+	private static final String SPECIAL_COORDS 	 = "special_coords"; 
 	
 	StringWriter sw = new StringWriter();
 	PrintWriter pw = new PrintWriter(sw);
@@ -89,10 +84,8 @@ public class Commander {
 			Logger.log("Player "+getTarget()+" sending valid custom command: "+parsedCmd);
 			currCmd = parsedCmd;
 			switch (parsedCmd) {
-				case "logCoords":
-					return cmdLogCoords(parsedArguments);
-				case "showCoords":
-					return cmdShowCoords(parsedArguments);
+				case "coords":
+					return cmdCoords(parsedArguments);
 				case "testCmd":
 					return cmdTestCmd(parsedArguments);
 				case "end":
@@ -146,15 +139,52 @@ public class Commander {
 	
 	/**
 	 * Custom command<br>
-	 * Player sends this command to log their current X/Y/Z coordinates to their playerdata/\<target\>/special_coords file.<br>
-	 * Player can optionally supply a "note" argument that will be saved with the coordinates (e.g. description of<br>
+	 * New implementation of coords commands. coords is the root command, followed by supplemental commands and arguments<br>
+	 * based on what the user wants to do.
+	 * Possible options are:<br>
+	 * log: add coords with note parameter<br>
+	 * Example: %%coords log Ice village<br>
+	 * rm: remove existing coords based on ID<br>
+	 * Example: %%coords rm 1 <remove coords with ID 1><br>
+	 */
+	public String cmdCoords(String parsedArguments) {
+		// Switch statement for determining which command to use
+		// Split the parsed arguments up
+		String[] coordArgs = parsedArguments.split(" ",2);
+		// If the resulting length of the coordArgs array is one, user did not provide an argument for the coords cmd... This may need to change
+		if (coordArgs.length == 1) {
+			Logger.log("Not enough arguments passed.");
+			rconSendFailCmdMsg("Not enough arguments passed for coords command.");
+			return FAILED_COMMAND;
+		}
+		switch (coordArgs[0]) {
+			case "log":
+				coordsLog(coordArgs[1]);
+				break;
+			case "rm":
+				coordsRm(coordArgs[1]);
+				break;
+			case "":
+				break;
+			default:
+				Logger.log("Coords command failed: Not a recognized coords command.");
+				rconSendFailCmdMsg("Coords command failed. That is not a recognized coords command.");
+				return FAILED_COMMAND;
+		}
+		return "Command passed";
+	}
+	
+	/**
+	 * coordsLogs: Command parameter for cmdCoords<br>
+	 * Player sends this command to log their current X/Y/Z coordinates to their playerdata/target/special_coords file.<br>
+	 * Player must supply a "note" argument that will be saved with the coordinates (e.g. description of<br>
 	 * the environment, a warning for other players, something silly). Coordinates are saved in the special_coords<br>
 	 * file as: Id, X/Y/Z coordinates, note. All coords are then written to palyer's special coords written book.<br>
 	 * If the coord book already exists in the player's inventory, then replace the book with one that has the new coords.
 	 */
-	public String cmdLogCoords(String parsedArguments) {
+	public String coordsLog(String note) {
 		// Make sure that the notes are not over X characters long
-		if (parsedArguments.length() > MAX_NOTE_LENGTH) {
+		if (note.length() > MAX_NOTE_LENGTH) {
 			Logger.log("Note for coords is too long.");
 			rconSendFailCmdMsg("Note for coord is too long, please limit notes to "+MAX_NOTE_LENGTH+" chars.");
 			return FAILED_COMMAND;
@@ -165,9 +195,9 @@ public class Commander {
 		String respBody = rconSendAndGet(serverCmdText);
 		// TODO: If response comes back with failed command, do something
 		// Create directory for target specific data dir
-		String targetDataDirStr = WORKING_CMDR_DIR+"/../serverdata/playerdata/"+getTarget();
+		String targetDataDirStr = PLAYERDATA_DIR + getTarget();
 		File targetDataDirFile 	= new File(targetDataDirStr);
-		Path specialCoords 	= FileSystems.getDefault().getPath(targetDataDirStr, "special_coords");
+		Path specialCoords 	= FileSystems.getDefault().getPath(targetDataDirStr, SPECIAL_COORDS);
 		// ID and bool for first entry
 		int id = 0;
 		boolean firstEntry = false;
@@ -214,19 +244,14 @@ public class Commander {
 			String tempLine = "";
 			String line = "";
 			try {
-				while(tempLine != null) {
+				while((tempLine = reader.readLine()) != null) {
 					line = tempLine;
-					tempLine = reader.readLine();
 				}			
 				reader.close();
-				// Get last id and increment 
-				try {
+				// Check for case where the file has no entries (e.g. the player deleted all of them)
+				// If first line is empty, don't do anything (id stays as 0)
+				if (!line.trim().equals("")) {
 					id = Integer.parseInt(line.split(",",2)[0])+1;
-				} 
-				catch (NumberFormatException e){
-					Logger.log("Failed to read number from line. Probably written wrong. Error:\n"+stackTraceToString(e));
-					rconSendFailCmdMsg("Failed to read proper corod ID from file. Please contact admin.");
-					return FAILED_COMMAND;
 				}
 			} catch (IOException e) {
 				Logger.log("Failed to read line or close reader. Error:\n"+stackTraceToString(e));
@@ -239,7 +264,7 @@ public class Commander {
 		for (String s : String.join(" ", respBody.split("\\[",2)[1].split("\\]",2)[0]).split(",",3)) {
 			coordStr += String.format("%.1f, ", (float) Float.parseFloat(s.substring(0, s.length()-1)));
 		}
-		coordStr = id + ", " + coordStr + "Note: " + parsedArguments;
+		coordStr = id + ", " + coordStr + "Note: " + note;
 		// Write coordinates to file
 		try {
 			Files.write(specialCoords, (coordStr+"\n").getBytes(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
@@ -275,35 +300,96 @@ public class Commander {
 		return respBody;
 	}
 	
-	
-	
 	/**
-	 * Custom command<br>
-	 * Shows the player the last ten locations of their special coords file as a personal hover event message<br>
+	 * coordsRm: Command parameter for cmdCoords<br>
+	 * Player sends this command to delete a coordinate in their coords book. Player sends this parameter along with an<br>
+	 * ID for the coordinate that they wish to remove. The coordinate is deleted from the coord book and a new book is generated<br>
+	 * for the player.
 	 */
-	public String cmdShowCoords(String parsedArguments) {
-		Logger.log("Displaying coords for "+getTarget());
-		// Access targeted player's special coords file
-		String targetDataDirStr = WORKING_CMDR_DIR+"/../serverdata/playerdata/"+getTarget();
-		Path specialCoords = FileSystems.getDefault().getPath(targetDataDirStr, "special_coords");
-		// Check to see if the file exists
-		String respBody = "";
+	public String coordsRm(String id) {
+		// Variables for player data file path
+		String targetDataDirStr = PLAYERDATA_DIR + getTarget();
+		Path specialCoords 	= FileSystems.getDefault().getPath(targetDataDirStr, SPECIAL_COORDS);
+		// If special coords file does not exist for user, return fail
 		if (!Files.exists(specialCoords)) {
-			Logger.log("Special coords file for "+getTarget()+" does not exist");
-			rconSendDirMsg("You do not have a special coords file. Run the command 'logCoords' to generate one.");
-			return respBody;
-		}
-		// If it exists, display contents in message with hover event
-		try {
-			String coords = Files.readString(specialCoords).replace("\n","\\n");
-			// Send rcon command to send raw json hover message to specified player
-			String serverCmdText = "tellraw "+getTarget()+" {\"text\":\"Hover for coords\",\"hoverEvent\":{\"action\":\"show_text\",\"value\":\""+coords+"\"}}";
-			respBody = rconSendAndGet(serverCmdText);
-		} catch (IOException e) {
-			Logger.log("Special coord file failed to be read. Error:\n"+stackTraceToString(e));
+			Logger.log("Special coord file does not exist for "+getTarget());
+			rconSendFailCmdMsg("You do not have a special coords file, probably because you have not logged any coords."+
+							   " If you think this is incorrect, please contact admin.");
 			return FAILED_COMMAND;
 		}
-		return respBody;
+		BufferedReader reader;
+		try {
+			reader = new BufferedReader(new FileReader(specialCoords.toString()));
+		}
+		catch (FileNotFoundException e) {
+			Logger.log("Special coord file failed to be found. Error:\n"+stackTraceToString(e));
+			rconSendFailCmdMsg("Special coord file could not be found. Please contact admin.");
+			return FAILED_COMMAND;
+		}
+		String line = "";
+		String replaceContents = "";
+		boolean idFound = false;
+		// Read each line of file looking for the id that is to be deleted
+		try {
+			while((line = reader.readLine()) != null) {
+				// If line does not contain id, add it to the replace string
+				if (!line.split(",")[0].equals(id)) {
+					replaceContents += line+"\n";
+				}
+				// If line does contain id, don't add it to replace string and set id found flag to true
+				else {
+					Logger.log("FOUND THE ID!");
+					idFound = true;
+				}
+			}			
+			reader.close();
+		} catch (IOException e) {
+			Logger.log("Failed to read line or close reader. Error:\n"+stackTraceToString(e));
+			rconSendFailCmdMsg("Failed to read line or close player special coords files. Please contact admin.");
+			return FAILED_COMMAND;
+		}
+		// If id was found, replace the special coords file contents with the new contents and send new book to player
+		if (idFound) {
+			FileWriter writer;
+			try {
+				Logger.log("Overwriting special coords file with new coords list.");
+				rconSendDirMsg("Deleting coordinate with ID "+id+" from special coords file.");
+				writer = new FileWriter(specialCoords.toString(), false);
+				writer.write(replaceContents);
+				writer.close();
+			}
+			catch (IOException e) {
+				Logger.log("Special coord file failed to be found. Error:\n"+stackTraceToString(e));
+				rconSendFailCmdMsg("Special coord file could not be found. Please contact admin.");
+				return FAILED_COMMAND;
+			}
+			// Write coords to written book for the player
+			// Check if the player already has the book in their inventory
+			String respBody = rconSendAndGet(CommandRefs.generateGetItemSlot("{id:\"minecraft:written_book\",tag:{Owner:\""+getTarget()+"\"}}", getTarget()));
+			// If they don't have it, give it to them
+			if (respBody.contains("Found no elements matching")) {
+				respBody = rconSendAndGet(CommandRefs.generateGiveCoordBook(replaceContents.replace("\n", "\\\\n"), getTarget()));
+				rconSendDirMsg("Coords book generated!");
+			}
+			// Player has the book, replace their current one this a modified one
+			else if (respBody.contains("has the following entity data: ")) {
+				String slotStr = respBody.split("has the following entity data: ",2)[1].replace("b",""); 
+				respBody = rconSendAndGet(CommandRefs.generateModifyCoordBook(replaceContents.replace("\n", "\\\\n"), getTarget(), slotStr));
+				rconSendDirMsg("Coords book updated!");
+			}
+			// Player probably has multiple copies of the book (fucker)
+			else {
+				rconSendDirMsg("Desired coordinate was deleted but the server cannot update the book because the player probably"+
+							   " has too many copies of the book in their inventory. Get rid of extras please.");
+			}
+			return respBody;
+		}
+		else {
+			// Id was not found, let player know
+			Logger.log("ID was not found in player's special coords file.");
+			rconSendDirMsg("Coord ID "+id+" was not found in special coord file.");
+			return "id_not_found";
+		}
 	}
 
 	/**
