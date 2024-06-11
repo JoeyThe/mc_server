@@ -56,7 +56,8 @@ public class Commander {
 	public Commander(RconClient rc) {
 		// Initialize RCON client and authenticate with server
 		this.rc = rc;
-                String pwrd = "SeVeN_mc_890";
+		// The below password is incorrect
+        String pwrd = "";
 		// SERVERDATA_AUTH triggers authentication method in RCON client class
 		if (rc.authenticateClient(pwrd)) {
 			Logger.log("Authentication successful!");
